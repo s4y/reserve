@@ -6,15 +6,31 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"time"
 
-	"github.com/rjeczalik/notify"
+	"./httpsuffixer"
+	"./sseserver"
+	"./watcher"
 )
 
-type handler func(http.ResponseWriter, *http.Request)
+var gFilters = map[string][]byte{
+	"text/html": []byte(`
+<script>
+'use strict';
+(() => {
+	const es = new EventSource("/.reserve/changes");
+	es.addEventListener('change', e => {
+		location.reload(true);
+	});
 
-func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h(w, r)
+	let wasOpen = false;
+	es.addEventListener('open', e => {
+		if (wasOpen)
+			location.reload(true);
+		wasOpen = true;
+	});
+})();
+</script>
+`),
 }
 
 func main() {
@@ -31,68 +47,27 @@ func main() {
 		log.Fatal(err)
 	}
 
-	clients := []chan string{}
-	fschannel := make(chan notify.EventInfo, 100)
+	sseServer := sseserver.SSEServer{}
+	sseServer.Start()
 
+	suffixer := httpsuffixer.SuffixServer{gFilters}
+
+	watcher := watcher.NewWatcher(cwd)
 	go func() {
-		// A text editor may save a file in several steps, like creating a
-		// temporary file and then renaming it on top of the original, or
-		// creating a backup file and then deleting it.
-		//
-		// To squash the noise, the top-level loop waits for one event, then
-		// sets a timeout and collects any additional events that arrive before
-		// it fires, then dispatches events only for files which still exist at
-		// the end. (As a result, deletes aren't reported; that's fine for the
-		// use case of "reload files that change".)
-		for event := range fschannel {
-			touched := make(map[string]bool)
-			handle := func(event notify.EventInfo) {
-				touched[event.Path()] = true
-			}
-			handle(event)
-
-			// 3ms felt right, but might not be.
-			for timeout := time.After(3 * time.Millisecond); timeout != nil; {
-				select {
-				case event := <-fschannel:
-					handle(event)
-				case <-timeout:
-					timeout = nil
-				}
-			}
-
-			for path, _ := range touched {
-				if _, err := os.Stat(path); err != nil {
-					continue
-				}
-				fmt.Println(path)
-				for _, client := range clients {
-					client <- path
-				}
-			}
+		for change := range watcher.Changes {
+			sseServer.Broadcast("change", change)
 		}
 	}()
 
-	ServeSSE := func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-w.(http.CloseNotifier).CloseNotify():
-			return
-		}
-	}
+	fileServer := suffixer.WrapServer(http.FileServer(http.Dir(cwd)))
 
-	err = notify.Watch(cwd, fschannel, notify.All)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fileServer := http.FileServer(http.Dir(cwd))
-
-	log.Fatal(http.Serve(ln, handler(func(w http.ResponseWriter, r *http.Request) {
+	log.Fatal(http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		if r.URL.Path == "/.reserve/changes" {
-			ServeSSE(w, r)
-			return
+			sseServer.ServeHTTP(w, r)
+		} else {
+			fileServer.ServeHTTP(w, r)
+			// w.Write([]byte("outer fn was here"))
 		}
-		fileServer.ServeHTTP(w, r)
 	})))
 }
