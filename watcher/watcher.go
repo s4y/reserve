@@ -3,6 +3,7 @@ package watcher
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/rjeczalik/notify"
@@ -51,7 +52,11 @@ func NewWatcher(dir string) *Watcher {
 				if _, err := os.Stat(path); err != nil {
 					continue
 				}
-				w.Changes <- path
+				relpath, err := filepath.Rel(dir, path)
+				if err != nil {
+					log.Fatal(err)
+				}
+				w.Changes <- relpath
 			}
 		}
 	}()
