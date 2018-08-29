@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -14,7 +15,7 @@ import (
 
 var gFilters = map[string][]byte{
 	"text/html": []byte(`
-<script defer>
+<script>
 'use strict';
 (() => {
 	const newHookForExtension = {
@@ -55,6 +56,13 @@ var gFilters = map[string][]byte{
 			location.reload(true);
 		wasOpen = true;
 	});
+
+	let stdin = new EventSource("/.reserve/stdin");
+	stdin.addEventListener("line", e => {
+		const ev = new CustomEvent('stdin');
+		ev.data = e.data;
+		window.dispatchEvent(ev);
+	});
 })();
 </script>
 `),
@@ -86,11 +94,22 @@ func main() {
 		}
 	}()
 
+	stdinServer := sseserver.SSEServer{}
+	stdinServer.Start()
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			stdinServer.Broadcast("line", scanner.Text())
+		}
+	}()
+
 	fileServer := suffixer.WrapServer(http.FileServer(http.Dir(cwd)))
 
 	log.Fatal(http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.reserve/changes" {
 			sseServer.ServeHTTP(w, r)
+		} else if r.URL.Path == "/.reserve/stdin" {
+			stdinServer.ServeHTTP(w, r)
 		} else {
 			fileServer.ServeHTTP(w, r)
 			// w.Write([]byte("outer fn was here"))
