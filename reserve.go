@@ -23,9 +23,8 @@ var gFilters = map[string][]byte{
 (() => {
 	const newHookForExtension = {
 		'css': f => {
-			const fHref = new URL(f, location.href).href;
 			for (let el of document.querySelectorAll('link[rel=stylesheet]')) {
-				if (new URL(el.href, location.href).href != fHref)
+				if (el.href != f)
 					continue;
 				return () => {
 					return fetch(f, { cache: 'reload' })
@@ -76,7 +75,7 @@ var gFilters = map[string][]byte{
 
 	const es = new EventSource("/.reserve/changes");
 	es.addEventListener('change', e => {
-		const target = e.data;
+		const target = new URL(e.data, location.href).href;
 		if (!(target in hooks)) {
 			const ext = target.split('/').pop().split('.').pop();
 			if (newHookForExtension[ext])
