@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
+	"strings"
 	"text/template"
 
 	"./httpsuffixer"
@@ -142,6 +144,9 @@ func main() {
 	watcher := watcher.NewWatcher(cwd)
 	go func() {
 		for change := range watcher.Changes {
+			if strings.HasPrefix(path.Base(change), ".") {
+				continue
+			}
 			sseServer.Broadcast("change", "/"+change)
 		}
 	}()
