@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"text/template"
 
 	"./httpsuffixer"
 	"./sseserver"
@@ -33,6 +34,40 @@ var gFilters = map[string][]byte{
 				};
 				break;
 			}
+		},
+		'js': f => {
+		return () => {
+			return fetch(f, { cache: 'reload' })
+				.then(r => r.blob())
+				.then(blob => Promise.all([
+					import(` + "`" + `${f}?live_module` + "`" + `),
+					import(URL.createObjectURL(blob)),
+				]))
+				.then(mods => {
+					const oldm = mods[0];
+					const newm = mods[1];
+					if (!oldm.__reserve_setters)
+						location.reload(true);
+					for (const k in newm) {
+						const oldproto = oldm[k].prototype;
+						const newproto = newm[k].prototype;
+						if (oldproto) {
+							for (const protok of Object.getOwnPropertyNames(oldproto)) {
+								Object.defineProperty(oldproto, protok, { value: function (...args) {
+									Object.setPrototypeOf(this, newproto);
+									if (this.adopt)
+										this.adopt(oldproto);
+									this[protok](...args);
+								} });
+							}
+						}
+						const setter = oldm.__reserve_setters[k];
+						if (!setter)
+							location.reload(true);
+						setter(newm[k]);
+					}
+				})
+			};
 		}
 	};
 	const hooks = Object.create(null);
@@ -46,7 +81,8 @@ var gFilters = map[string][]byte{
 				hooks[target] = newHookForExtension[ext](target);
 		}
 		if (hooks[target]) {
-			return hooks[target]();
+			if (hooks[target]() !== false)
+				return;
 		}
 		location.reload(true);
 	});
@@ -67,6 +103,21 @@ var gFilters = map[string][]byte{
 })();
 </script>
 `),
+}
+
+func jsWrapper(orig_filename string) string {
+	f := template.JSEscapeString(orig_filename)
+	return `
+export * from "` + f + `"
+
+import * as mod from "` + f + `"
+let _default = mod.default
+export {_default as default}
+
+export const __reserve_setters = {}
+for (const k in mod)
+  __reserve_setters[k] = eval(` + "`" + `v => ${k == 'default' ? '_default' : k} = v` + "`" + `)
+	`
 }
 
 func main() {
@@ -111,6 +162,9 @@ func main() {
 			sseServer.ServeHTTP(w, r)
 		} else if r.URL.Path == "/.reserve/stdin" {
 			stdinServer.ServeHTTP(w, r)
+		} else if _, exists := r.URL.Query()["live_module"]; exists {
+			w.Header().Set("Content-Type", "application/javascript")
+			w.Write([]byte(jsWrapper(r.URL.Path)))
 		} else {
 			fileServer.ServeHTTP(w, r)
 			// w.Write([]byte("outer fn was here"))
