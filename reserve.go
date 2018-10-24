@@ -153,6 +153,7 @@ func main() {
 		for scanner.Scan() {
 			stdinServer.Broadcast("line", scanner.Text())
 		}
+		os.Exit(0)
 	}()
 
 	fileServer := suffixer.WrapServer(http.FileServer(http.Dir(cwd)))
