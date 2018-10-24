@@ -20,8 +20,9 @@ var gFilters = map[string][]byte{
 (() => {
 	const newHookForExtension = {
 		'css': f => {
+			const fHref = new URL(f, location.href).href;
 			for (let el of document.querySelectorAll('link[rel=stylesheet]')) {
-				if (el.href != f)
+				if (new URL(el.href, location.href).href != fHref)
 					continue;
 				return () => {
 					return fetch(f, { cache: 'reload' })
@@ -38,7 +39,7 @@ var gFilters = map[string][]byte{
 
 	const es = new EventSource("/.reserve/changes");
 	es.addEventListener('change', e => {
-		const target = ` + "`" + `${location.origin}/${e.data}` + "`" + `;
+		const target = e.data;
 		if (!(target in hooks)) {
 			const ext = target.split('/').pop().split('.').pop();
 			if (newHookForExtension[ext])
@@ -90,7 +91,7 @@ func main() {
 	watcher := watcher.NewWatcher(cwd)
 	go func() {
 		for change := range watcher.Changes {
-			sseServer.Broadcast("change", change)
+			sseServer.Broadcast("change", "/"+change)
 		}
 	}()
 
