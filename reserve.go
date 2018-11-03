@@ -11,9 +11,9 @@ import (
 	"strings"
 	"text/template"
 
-	"./httpsuffixer"
-	"./sseserver"
-	"./watcher"
+	"github.com/s4y/go-sse"
+	"github.com/s4y/reserve/httpsuffixer"
+	"github.com/s4y/reserve/watcher"
 )
 
 var gFilters = map[string][]byte{
@@ -135,7 +135,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	sseServer := sseserver.SSEServer{}
+	sseServer := sse.SSEServer{}
 	sseServer.Start()
 
 	suffixer := httpsuffixer.SuffixServer{gFilters}
@@ -150,7 +150,7 @@ func main() {
 		}
 	}()
 
-	stdinServer := sseserver.SSEServer{}
+	stdinServer := sse.SSEServer{}
 	stdinServer.Start()
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
