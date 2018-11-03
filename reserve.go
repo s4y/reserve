@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -122,10 +123,11 @@ for (const k in mod)
 }
 
 func main() {
-	host := "127.0.0.1:8080"
-	fmt.Printf("http://%s/\n", host)
+	httpAddr := flag.String("http", "127.0.0.1:8080", "Listening address")
+	flag.Parse()
+	fmt.Printf("http://%s/\n", *httpAddr)
 
-	ln, err := net.Listen("tcp", host)
+	ln, err := net.Listen("tcp", *httpAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
