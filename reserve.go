@@ -22,54 +22,56 @@ var gFilters = map[string][]byte{
 <script>
 'use strict';
 (() => {
-	const newHookForExtension = {
-		'css': f => {
-			for (let el of document.querySelectorAll('link[rel=stylesheet]')) {
-				if (el.href != f)
-					continue;
-				return () => {
-					return fetch(f, { cache: 'reload' })
-						.then(r => r.blob())
-						.then(blob => {
-							el.href = URL.createObjectURL(blob);
-						});
-				};
-				break;
-			}
-		},
+	const cacheBustQuery = () => ` + "`" + `?cache_bust=${+new Date}` + "`" + `;
+	const hookForExtension = {
 		'js': f => {
-		return () => {
-			return fetch(f, { cache: 'reload' })
-				.then(r => r.blob())
-				.then(blob => Promise.all([
-					import(` + "`" + `${f}?live_module` + "`" + `),
-					import(URL.createObjectURL(blob)),
-				]))
-				.then(mods => {
-					const oldm = mods[0];
-					const newm = mods[1];
-					if (!oldm.__reserve_setters)
-						location.reload(true);
-					for (const k in newm) {
-						const oldproto = oldm[k].prototype;
-						const newproto = newm[k].prototype;
-						if (oldproto) {
-							for (const protok of Object.getOwnPropertyNames(oldproto)) {
-								Object.defineProperty(oldproto, protok, { value: function (...args) {
-									Object.setPrototypeOf(this, newproto);
-									if (this.adopt)
-										this.adopt(oldproto);
-									this[protok](...args);
-								} });
-							}
-						}
-						const setter = oldm.__reserve_setters[k];
-						if (!setter)
+			let last_f = f;
+			return () => {
+				if (!window.__reserve_hot_modules || !window.__reserve_hot_modules[f])
+					return false;
+				const next_f = ` + "`" + `${f}${cacheBustQuery()}&raw` + "`" + `;
+				return Promise.all([
+						import(f),
+						import(last_f),
+						import(next_f),
+					])
+					.then(mods => {
+						last_f = next_f;
+						const [origm, oldm, newm] = mods;
+						if (!origm.__reserve_setters)
 							location.reload(true);
-						setter(newm[k]);
-					}
-				})
+						for (const k in newm) {
+							const oldproto = oldm[k].prototype;
+							const newproto = newm[k].prototype;
+							if (oldproto) {
+								for (const protok of Object.getOwnPropertyNames(oldproto)) {
+									Object.defineProperty(oldproto, protok, { value: function (...args) {
+										if (Object.getPrototypeOf(this) != oldproto)
+											return false;
+										Object.setPrototypeOf(this, newproto);
+										if (this.adopt && protok != 'adopt')
+											this.adopt(oldproto);
+										this[protok](...args);
+									} });
+								}
+							}
+							const setter = origm.__reserve_setters[k];
+							if (!setter)
+								location.reload(true);
+							setter(newm[k]);
+						}
+					});
 			};
+		}
+	};
+	const genericHook = f => {
+		for (let el of document.querySelectorAll('link')) {
+			if (el.href != f)
+				continue;
+			return () => {
+				el.href = f + cacheBustQuery();
+			};
+			break;
 		}
 	};
 	const hooks = Object.create(null);
@@ -79,14 +81,17 @@ var gFilters = map[string][]byte{
 		const target = new URL(e.data, location.href).href;
 		if (!(target in hooks)) {
 			const ext = target.split('/').pop().split('.').pop();
-			if (newHookForExtension[ext])
-				hooks[target] = newHookForExtension[ext](target);
+			if (hookForExtension[ext])
+				hooks[target] = hookForExtension[ext](target);
+			else
+				hooks[target] = genericHook(target);
 		}
-		if (hooks[target]) {
-			if (hooks[target]() !== false)
-				return;
-		}
-		location.reload(true);
+		Promise.resolve()
+			.then(() => hooks[target]())
+			.then(r => (r === false) && Promise.reject())
+			.catch(() => {
+				location.reload(true);
+			});
 	});
 
 	let wasOpen = false;
@@ -110,16 +115,46 @@ var gFilters = map[string][]byte{
 func jsWrapper(orig_filename string) string {
 	f := template.JSEscapeString(orig_filename)
 	return `
-export * from "` + f + `"
+export * from "` + f + `?raw"
 
-import * as mod from "` + f + `"
+import * as mod from "` + f + `?raw"
 let _default = mod.default
 export {_default as default}
 
 export const __reserve_setters = {}
 for (const k in mod)
   __reserve_setters[k] = eval(` + "`" + `v => ${k == 'default' ? '_default' : k} = v` + "`" + `)
-	`
+
+if (!window.__reserve_hot_modules)
+  window.__reserve_hot_modules = {};
+window.__reserve_hot_modules[new URL("` + f + `", location.href).href] = true;
+`
+}
+
+func isHotModule(path string) bool {
+	if !strings.HasSuffix(path, ".js") {
+		return false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	firstLine, _ := bufio.NewReader(file).ReadString('\n')
+	return firstLine == "// reserve:hot_reload\n"
+}
+
+func hasHiddenComponent(p string) bool {
+	rest := p
+	for {
+		if strings.HasPrefix(path.Base(rest), ".") {
+			return true
+		}
+		rest = path.Dir(rest)
+		if rest == "." {
+			break
+		}
+	}
+	return false
 }
 
 func main() {
@@ -167,7 +202,7 @@ func main() {
 			changeServer.ServeHTTP(w, r)
 		} else if r.URL.Path == "/.reserve/stdin" {
 			stdinServer.ServeHTTP(w, r)
-		} else if _, exists := r.URL.Query()["live_module"]; exists {
+		} else if _, exists := r.URL.Query()["raw"]; !exists && isHotModule(path.Join(".", r.URL.Path)) {
 			w.Header().Set("Content-Type", "application/javascript")
 			w.Write([]byte(jsWrapper(r.URL.Path)))
 		} else {
