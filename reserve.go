@@ -137,8 +137,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	sseServer := sse.SSEServer{}
-	sseServer.Start()
+	changeServer := sse.Server{}
 
 	suffixer := httpsuffixer.SuffixServer{gFilters}
 
@@ -148,16 +147,15 @@ func main() {
 			if strings.HasPrefix(path.Base(change), ".") {
 				continue
 			}
-			sseServer.Broadcast("change", "/"+change)
+			changeServer.Broadcast(sse.Event{Name: "change", Data: "/" + change})
 		}
 	}()
 
-	stdinServer := sse.SSEServer{}
-	stdinServer.Start()
+	stdinServer := sse.Server{}
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			stdinServer.Broadcast("line", scanner.Text())
+			stdinServer.Broadcast(sse.Event{Name: "line", Data: scanner.Text()})
 		}
 		os.Exit(0)
 	}()
@@ -166,7 +164,7 @@ func main() {
 
 	log.Fatal(http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.reserve/changes" {
-			sseServer.ServeHTTP(w, r)
+			changeServer.ServeHTTP(w, r)
 		} else if r.URL.Path == "/.reserve/stdin" {
 			stdinServer.ServeHTTP(w, r)
 		} else if _, exists := r.URL.Query()["live_module"]; exists {
