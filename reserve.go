@@ -179,7 +179,7 @@ func main() {
 	watcher := watcher.NewWatcher(cwd)
 	go func() {
 		for change := range watcher.Changes {
-			if strings.HasPrefix(path.Base(change), ".") {
+			if hasHiddenComponent(change) {
 				continue
 			}
 			changeServer.Broadcast(sse.Event{Name: "change", Data: "/" + change})

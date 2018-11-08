@@ -61,7 +61,7 @@ func NewWatcher(dir string) *Watcher {
 		}
 	}()
 
-	err := notify.Watch(dir, w.events, notify.All)
+	err := notify.Watch(filepath.Join(dir, "..."), w.events, notify.All)
 	if err != nil {
 		log.Fatal(err)
 	}
