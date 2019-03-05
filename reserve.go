@@ -1,11 +1,7 @@
-package main
+package reserve
 
 import (
 	"bufio"
-	"flag"
-	"fmt"
-	"log"
-	"net"
 	"net/http"
 	"os"
 	"path"
@@ -157,26 +153,12 @@ func hasHiddenComponent(p string) bool {
 	return false
 }
 
-func main() {
-	httpAddr := flag.String("http", "127.0.0.1:8080", "Listening address")
-	flag.Parse()
-	fmt.Printf("http://%s/\n", *httpAddr)
-
-	ln, err := net.Listen("tcp", *httpAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func CreateServer(directory string) http.Handler {
 	changeServer := sse.Server{}
 
 	suffixer := httpsuffixer.SuffixServer{gFilters}
 
-	watcher := watcher.NewWatcher(cwd)
+	watcher := watcher.NewWatcher(directory)
 	go func() {
 		for change := range watcher.Changes {
 			if hasHiddenComponent(change) {
@@ -195,9 +177,15 @@ func main() {
 		os.Exit(0)
 	}()
 
-	fileServer := suffixer.WrapServer(http.FileServer(http.Dir(cwd)))
+	fileServer := suffixer.WrapServer(http.FileServer(http.Dir(directory)))
+	fileServer = func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			handler.ServeHTTP(w, r)
+		})
+	}(fileServer)
 
-	log.Fatal(http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.reserve/changes" {
 			changeServer.ServeHTTP(w, r)
 		} else if r.URL.Path == "/.reserve/stdin" {
@@ -207,7 +195,6 @@ func main() {
 			w.Write([]byte(jsWrapper(r.URL.Path)))
 		} else {
 			fileServer.ServeHTTP(w, r)
-			// w.Write([]byte("outer fn was here"))
 		}
-	})))
+	})
 }

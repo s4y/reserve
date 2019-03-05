@@ -48,11 +48,13 @@ func NewWatcher(dir string) *Watcher {
 				}
 			}
 
+			absDir, _ := filepath.EvalSymlinks(dir)
+
 			for path, _ := range touched {
 				if _, err := os.Stat(path); err != nil {
 					continue
 				}
-				relpath, err := filepath.Rel(dir, path)
+				relpath, err := filepath.Rel(absDir, path)
 				if err != nil {
 					log.Fatal(err)
 				}
