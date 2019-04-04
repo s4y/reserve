@@ -8,8 +8,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/s4y/go-sse"
 	"github.com/s4y/reserve/httpsuffixer"
+	"github.com/s4y/reserve/sse"
 	"github.com/s4y/reserve/watcher"
 )
 
