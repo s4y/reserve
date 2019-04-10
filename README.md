@@ -18,9 +18,7 @@ index.html style.css
 http://127.0.0.1:8080/
 ```
 
-The whole page will reload if almost any file changes on disk. But, there's special handling for some kinds of files — just CSS for now.
-
-**Example:** If the page includes CSS, like this:
+The whole page will reload if almost any file changes on disk. But, some kinds of files get special treatment. If a page includes CSS, like this:
 
 ```html
 <!DOCTYPE html>
@@ -93,7 +91,7 @@ Then, if you change `nextNumber()` to look like this:
   }
 ```
 
-…the page immediately starts counting up by two without reloading or losing the count.
+…the page immediately starts counting up by two without reloading or losing the count. (Note: Reserve will only attempt to reload a module if its first line is `// reserve:hot_reload`. Otherwise, it sticks to reloading the whole page.)
 
 If you give your class an `adopt()` method, then it will run the first time any method is called on each instance of the class, before the method itself runs. It may perform any work (e.g. recreating an element) to update it to the new version.
 
