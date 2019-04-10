@@ -61,7 +61,7 @@ var gFilters = map[string][]byte{
 										Object.setPrototypeOf(this, newproto);
 										if (this.adopt && protok != 'adopt')
 											this.adopt(oldproto);
-										this[protok](...args);
+										return this[protok](...args);
 									} });
 								}
 							}
