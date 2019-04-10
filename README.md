@@ -2,7 +2,14 @@
 Reserve is a web server, intended for local development use, which instantly reloads web pages (or parts of them) as you edit them.
 
 ## Getting started
-Run `reserve` in the directory which contains your website. It will print a link and then keep running (type Ctrl-C to exit):
+
+Install reserve with `go get`:
+
+```
+> go get -u github.com/s4y/reserve/reserve
+```
+
+Then, run `reserve` in the directory which contains your project. It will print a link and then keep running (type Ctrl-C to exit):
 
 ```
 > ls
