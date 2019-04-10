@@ -93,7 +93,7 @@ Then, if you change `nextNumber()` to look like this:
 
 …the page immediately starts counting up by two without reloading or losing the count. (Note: Reserve will only attempt to reload a module if its first line is `// reserve:hot_reload`. Otherwise, it sticks to reloading the whole page.)
 
-If you give your class an `adopt()` method, then it will run the first time any method is called on each instance of the class, before the method itself runs. It may perform any work (e.g. recreating an element) to update it to the new version.
+To reload a module, Reserve modifies the old class so that if any method is called on an object of that class, the object's prototype switches to the new version before the method runs. If the (new) class has an `adopt()` method, then `adopt()` runs just before the original method. `adopt()` can perform any work (e.g. recreating an element) to update the object to the new version.
 
 ## Current status
 
