@@ -22,22 +22,23 @@ By default, other computers cannot visit your site. You may specify an alternate
 
 Reserve will currently reload the whole page if its HTML file changes. If the page includes external CSS, like this:
 
-<fieldset>
-<legend><code>index.html</code></legend>
-<pre lang=html><code>&lt;!DOCTYPE html&gt;
-&lt;link rel=stylesheet href=style.css&gt;</code></pre>
-</fieldset>
+**index.html**:
 
+```html
+<!DOCTYPE html>
+<link rel=stylesheet href=style.css>
+```
 …then if `style.css` changes, the page's CSS will update without reloading the page as a whole.
 
 ## Tips and Tricks
 
 If you include a transition in your CSS, like this:
 
-<fieldset>
-<legend><code>style.css</code></legend>
-<pre lang=css><code>* { transition: all 0.2s; }</code></pre>
-</fieldset>
+**style.css**:
+
+```css
+* { transition: all 0.2s; }
+```
 
 …then style changes will ✨animate✨.
 
@@ -47,31 +48,35 @@ Reserve includes **experimental** support for reloading JavaScript modules. Only
 
 For example, if you have the following files in your project:
 
-<fieldset>
-<legend><code>index.html</code></legend>
-<pre lang=html><code>&lt;!DOCTYPE html&gt;
-&lt;div id=count&gt;&lt;/div&gt;
-&lt;script type=module&gt;
+**index.html**:
+
+```html
+<!DOCTYPE html>
+<div id=count></div>
+<script type=module>
 import Counter from '/Counter.js'
 
 let countElement = document.getElementById('count');
 let counter = new Counter();
 
-setInterval(() =&gt; {
+setInterval(() => {
   countElement.textContent = counter.nextNumber();
 }, 1000);
-&lt;/script&gt;</code></pre></fieldset>
+</script>
+```
 
-<fieldset>
-<legend><code>Counter.js</code></legend>
-<pre lang=javascript><code>// reserve:hot_reload
+**Counter.js**:
+
+```javascript
+// reserve:hot_reload
 
 export default class Counter {
   constructor() { this.count = 0; }
   nextNumber() {
     return this.count++;
   }
-}</code></pre></fieldset>
+}
+```
 
 Then, if you change `nextNumber()` to look like this:
 
