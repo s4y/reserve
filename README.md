@@ -18,6 +18,16 @@ index.html style.css
 http://127.0.0.1:8080/
 ```
 
+The whole page will reload if almost any file changes on disk. But, there's special handling for some kinds of files — just CSS for now.
+
+**Example:** If the page includes CSS, like this:
+
+```html
+<!DOCTYPE html>
+<link rel=stylesheet href=style.css>
+```
+…then if `style.css` changes, the style will update without reloading the page.
+
 By default, other computers cannot visit your site. You may specify an alternate port or IP address with the `-http` flag:
 
 | To… | Run… |
@@ -25,15 +35,7 @@ By default, other computers cannot visit your site. You may specify an alternate
 | …choose a different port | `reserve -http=127.0.0.1:8888` |
 | …let other computers connect | `reserve -http=:8080` |
 
-Reserve will currently reload the whole page if its HTML file changes. If the page includes external CSS, like this:
-
-**index.html**:
-
-```html
-<!DOCTYPE html>
-<link rel=stylesheet href=style.css>
-```
-…then if `style.css` changes, the page's CSS will update without reloading the page as a whole.
+Letting other computers on the network connect can be great for prototyping with a friend (who can load the page on their own computer and watch it update), or for testing on mobile devices.
 
 ## Tips and Tricks
 
@@ -91,9 +93,9 @@ Then, if you change `nextNumber()` to look like this:
   }
 ```
 
-…the page should immediately start counting up by two, without reloading or restarting the count.
+…the page immediately starts counting up by two without reloading or losing the count.
 
-If your class has an `adopt()` method, then it will be called on each instance the first time any method is called on that instance, before the method runs. It may perform any work (e.g. recreating an element) to update it to the new version.
+If you give your class an `adopt()` method, then it will run the first time any method is called on each instance of the class, before the method itself runs. It may perform any work (e.g. recreating an element) to update it to the new version.
 
 ## Current status
 
