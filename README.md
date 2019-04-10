@@ -20,12 +20,10 @@ http://127.0.0.1:8080/
 
 By default, other computers cannot visit your site. You may specify an alternate port or IP address with the `-http` flag:
 
-```
-# Listen locally on a different port:
-> reserve -http=127.0.0.1:8888
-# Listen *publicly* on all of your computer's IP addresses:
-> reserve -http=:8080
-```
+| To… | Run… |
+| --- | ---- |
+| …choose a different port | `reserve -http=127.0.0.1:8888` |
+| …let other computers connect | `reserve -http=:8080` |
 
 Reserve will currently reload the whole page if its HTML file changes. If the page includes external CSS, like this:
 
