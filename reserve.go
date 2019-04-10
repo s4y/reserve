@@ -175,7 +175,10 @@ func CreateServer(directory string) http.Handler {
 	watcher := watcher.NewWatcher(directory)
 	go func() {
 		for change := range watcher.Changes {
-			if hasHiddenComponent(change) {
+			if hasHiddenComponent(change) ||
+				// Vim backup files. This check can be tightened up if it's an
+				// issue for anyone.
+				strings.HasSuffix(change, "~") {
 				continue
 			}
 			changeServer.Broadcast(sse.Event{Name: "change", Data: "/" + change})
