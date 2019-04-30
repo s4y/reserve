@@ -153,20 +153,6 @@ func isHotModule(path string) bool {
 	return firstLine == "// reserve:hot_reload\n"
 }
 
-func hasHiddenComponent(p string) bool {
-	rest := p
-	for {
-		if strings.HasPrefix(path.Base(rest), ".") {
-			return true
-		}
-		rest = path.Dir(rest)
-		if rest == "." {
-			break
-		}
-	}
-	return false
-}
-
 func CreateServer(directory string) http.Handler {
 	changeServer := sse.Server{}
 
@@ -175,12 +161,6 @@ func CreateServer(directory string) http.Handler {
 	watcher := watcher.NewWatcher(directory)
 	go func() {
 		for change := range watcher.Changes {
-			if hasHiddenComponent(change) ||
-				// Vim backup files. This check can be tightened up if it's an
-				// issue for anyone.
-				strings.HasSuffix(change, "~") {
-				continue
-			}
 			changeServer.Broadcast(sse.Event{Name: "change", Data: "/" + change})
 		}
 	}()

@@ -17,11 +17,28 @@ package watcher
 import (
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rjeczalik/notify"
 )
+
+func hasHiddenComponent(p string) bool {
+	rest := p
+	for {
+		if strings.HasPrefix(path.Base(rest), ".") {
+			return true
+		}
+		next := path.Dir(rest)
+		if next == rest {
+			break
+		}
+		rest = next
+	}
+	return false
+}
 
 type Watcher struct {
 	Changes chan string
@@ -65,6 +82,12 @@ func NewWatcher(dir string) *Watcher {
 			absDir, _ := filepath.EvalSymlinks(dir)
 
 			for path, _ := range touched {
+				if hasHiddenComponent(path) ||
+					// Vim backup files. This check can be tightened up if it's an
+					// issue for anyone.
+					strings.HasSuffix(path, "~") {
+					continue
+				}
 				if _, err := os.Stat(path); err != nil {
 					continue
 				}
