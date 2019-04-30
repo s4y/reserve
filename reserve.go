@@ -34,12 +34,61 @@ var gFilters = map[string][]byte{
 (() => {
 	const cacheBustQuery = () => ` + "`" + `?cache_bust=${+new Date}` + "`" + `;
 	const hookForExtension = {
+	};
+	window.__reserve_hooks = hookForExtension;
+	const genericHook = f => {
+		for (let el of document.querySelectorAll('link')) {
+			if (el.href != f)
+				continue;
+			return () => {
+				el.href = f + cacheBustQuery();
+			};
+			break;
+		}
+	};
+	const hooks = Object.create(null);
+
+	const es = new EventSource("/.reserve/changes");
+	es.addEventListener('change', e => {
+		const target = new URL(e.data, location.href).href;
+		if (!(target in hooks)) {
+			const ext = target.split('/').pop().split('.').pop();
+			if (hookForExtension[ext])
+				hooks[target] = hookForExtension[ext](target);
+			else
+				hooks[target] = genericHook(target);
+		}
+		Promise.resolve()
+			.then(() => hooks[target](target + cacheBustQuery()))
+			.then(r => (r === false) && Promise.reject())
+			.catch(() => {
+				location.reload(true);
+			});
+	});
+
+	let wasOpen = false;
+	es.addEventListener('open', e => {
+		if (wasOpen)
+			location.reload(true);
+		wasOpen = true;
+	});
+
+	let stdin = new EventSource("/.reserve/stdin");
+	stdin.addEventListener("line", e => {
+		const ev = new CustomEvent('stdin');
+		ev.data = e.data;
+		window.dispatchEvent(ev);
+	});
+})();
+</script>
+<script type=module>
+	Object.assign(window.__reserve_hooks, {
 		'js': f => {
 			let last_f = f;
-			return () => {
+			return next => {
 				if (!window.__reserve_hot_modules || !window.__reserve_hot_modules[f])
 					return false;
-				const next_f = ` + "`" + `${f}${cacheBustQuery()}&raw` + "`" + `;
+				const next_f = next + '&raw';
 				return Promise.all([
 						import(f),
 						import(last_f),
@@ -73,51 +122,7 @@ var gFilters = map[string][]byte{
 					});
 			};
 		}
-	};
-	const genericHook = f => {
-		for (let el of document.querySelectorAll('link')) {
-			if (el.href != f)
-				continue;
-			return () => {
-				el.href = f + cacheBustQuery();
-			};
-			break;
-		}
-	};
-	const hooks = Object.create(null);
-
-	const es = new EventSource("/.reserve/changes");
-	es.addEventListener('change', e => {
-		const target = new URL(e.data, location.href).href;
-		if (!(target in hooks)) {
-			const ext = target.split('/').pop().split('.').pop();
-			if (hookForExtension[ext])
-				hooks[target] = hookForExtension[ext](target);
-			else
-				hooks[target] = genericHook(target);
-		}
-		Promise.resolve()
-			.then(() => hooks[target]())
-			.then(r => (r === false) && Promise.reject())
-			.catch(() => {
-				location.reload(true);
-			});
 	});
-
-	let wasOpen = false;
-	es.addEventListener('open', e => {
-		if (wasOpen)
-			location.reload(true);
-		wasOpen = true;
-	});
-
-	let stdin = new EventSource("/.reserve/stdin");
-	stdin.addEventListener("line", e => {
-		const ev = new CustomEvent('stdin');
-		ev.data = e.data;
-		window.dispatchEvent(ev);
-	});
-})();
 </script>
 `),
 }
