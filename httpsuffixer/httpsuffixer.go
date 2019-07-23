@@ -20,7 +20,7 @@ import (
 )
 
 type SuffixServer struct {
-	Suffixes map[string][]byte
+	GetSuffix func(string) []byte
 }
 
 type responseWriter struct {
@@ -40,7 +40,7 @@ func (w *responseWriter) Write(data []byte) (int, error) {
 
 func (w *responseWriter) WriteHeader(statusCode int) {
 	contentType := strings.SplitN(w.Parent.Header().Get("Content-Type"), ";", 2)[0]
-	if suffix, ok := w.Server.Suffixes[contentType]; ok {
+	if suffix := w.Server.GetSuffix(contentType); suffix != nil {
 		w.suffix = suffix
 		w.Header().Del("Content-Length") // TODO
 	}

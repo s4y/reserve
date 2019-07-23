@@ -24,121 +24,32 @@ import (
 
 	"github.com/s4y/reserve/httpsuffixer"
 	"github.com/s4y/reserve/sse"
+	"github.com/s4y/reserve/static"
 	"github.com/s4y/reserve/watcher"
 )
 
 var gFilters = map[string][]byte{
-	"text/html": []byte(`
-<script>
-'use strict';
-(() => {
-	const cacheBustQuery = () => ` + "`" + `?cache_bust=${+new Date}` + "`" + `;
-	const hookForExtension = {
-	};
-	window.__reserve_hooks = hookForExtension;
-	const genericHook = f => {
-		for (let el of document.querySelectorAll('link')) {
-			if (el.href != f)
-				continue;
-			return () => {
-				el.href = f + cacheBustQuery();
-			};
-			break;
-		}
-	};
-	const hooks = Object.create(null);
+	"text/html": []byte(static.FilterHtml),
+}
 
-	const es = new EventSource("/.reserve/changes");
-	es.addEventListener('change', e => {
-		const target = new URL(e.data, location.href).href;
-		if (!(target in hooks)) {
-			const ext = target.split('/').pop().split('.').pop();
-			if (hookForExtension[ext])
-				hooks[target] = hookForExtension[ext](target);
-			else
-				hooks[target] = genericHook(target);
-		}
-		Promise.resolve()
-			.then(() => hooks[target](target + cacheBustQuery()))
-			.then(r => (r === false) && Promise.reject())
-			.catch(() => {
-				location.reload(true);
-			});
-	});
-
-	let wasOpen = false;
-	es.addEventListener('open', e => {
-		if (wasOpen)
-			location.reload(true);
-		wasOpen = true;
-	});
-
-	let stdin = new EventSource("/.reserve/stdin");
-	stdin.addEventListener("line", e => {
-		const ev = new CustomEvent('stdin');
-		ev.data = e.data;
-		window.dispatchEvent(ev);
-	});
-})();
-</script>
-<script type=module>
-	Object.assign(window.__reserve_hooks, {
-		'js': f => {
-			let last_f = f;
-			return next => {
-				if (!window.__reserve_hot_modules || !window.__reserve_hot_modules[f])
-					return false;
-				const next_f = next + '&raw';
-				return Promise.all([
-						import(f),
-						import(last_f),
-						import(next_f),
-					])
-					.then(mods => {
-						last_f = next_f;
-						const [origm, oldm, newm] = mods;
-						if (!origm.__reserve_setters)
-							location.reload(true);
-						for (const k in newm) {
-							const oldproto = oldm[k].prototype;
-							const newproto = newm[k].prototype;
-							if (oldproto) {
-								for (const protok of Object.getOwnPropertyNames(oldproto)) {
-									Object.defineProperty(oldproto, protok, { value: function (...args) {
-										if (Object.getPrototypeOf(this) != oldproto)
-											return false;
-										Object.setPrototypeOf(this, newproto);
-										if (this.adopt && protok != 'adopt')
-											this.adopt(oldproto);
-										return this[protok](...args);
-									} });
-								}
-							}
-							const setter = origm.__reserve_setters[k];
-							if (!setter)
-								location.reload(true);
-							setter(newm[k]);
-						}
-					});
-			};
-		}
-	});
-</script>
-`),
+var gStaticFiles = map[string][]byte{
+	"/.reserve/reserve.js":         []byte(static.ReserveJs),
+	"/.reserve/reserve_modules.js": []byte(static.ReserveModulesJs),
 }
 
 func jsWrapper(orig_filename string) string {
 	f := template.JSEscapeString(orig_filename)
 	return `
-export * from "` + f + `?raw"
-
 import * as mod from "` + f + `?raw"
 let _default = mod.default
 export {_default as default}
 
-export const __reserve_setters = {}
-for (const k in mod)
-  __reserve_setters[k] = eval(` + "`" + `v => ${k == 'default' ? '_default' : k} = v` + "`" + `)
+export const __reserve_setters = {
+	default: v => _default = v,
+}
+
+if (typeof _default  === "function")
+	_default.__on_module_reloaded = [];
 
 if (!window.__reserve_hot_modules)
   window.__reserve_hot_modules = {};
@@ -161,7 +72,12 @@ func isHotModule(path string) bool {
 func CreateServer(directory string) http.Handler {
 	changeServer := sse.Server{}
 
-	suffixer := httpsuffixer.SuffixServer{gFilters}
+	suffixer := httpsuffixer.SuffixServer{func(content_type string) []byte {
+		if filter, ok := gFilters[content_type]; ok {
+			return filter
+		}
+		return nil
+	}}
 
 	watcher := watcher.NewWatcher(directory)
 	go func() {
@@ -195,6 +111,8 @@ func CreateServer(directory string) http.Handler {
 		} else if _, exists := r.URL.Query()["raw"]; !exists && isHotModule(path.Join(".", r.URL.Path)) {
 			w.Header().Set("Content-Type", "application/javascript")
 			w.Write([]byte(jsWrapper(r.URL.Path)))
+		} else if staticContent, ok := gStaticFiles[r.URL.Path]; ok {
+			http.ServeContent(w, r, r.URL.Path, static.ModTime, strings.NewReader(string(staticContent)))
 		} else {
 			fileServer.ServeHTTP(w, r)
 		}
