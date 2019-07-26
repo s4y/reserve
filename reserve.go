@@ -20,10 +20,11 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"text/template"
 
+	"github.com/gorilla/websocket"
 	"github.com/s4y/reserve/httpsuffixer"
-	"github.com/s4y/reserve/sse"
 	"github.com/s4y/reserve/static"
 	"github.com/s4y/reserve/watcher"
 )
@@ -69,8 +70,44 @@ func isHotModule(path string) bool {
 	return firstLine == "// reserve:hot_reload\n"
 }
 
+type ClientConnections struct {
+	connections []*websocket.Conn
+	lock        sync.Mutex
+}
+
+func (s *ClientConnections) add(c *websocket.Conn) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.connections = append(s.connections, c)
+}
+
+func (s *ClientConnections) remove(c *websocket.Conn) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	for i, cur_conn := range s.connections {
+		if cur_conn == c {
+			s.connections = append(s.connections[:i], s.connections[i+1:]...)
+			break
+		}
+	}
+}
+
+func (s *ClientConnections) broadcast(message interface{}) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	for _, conn := range s.connections {
+		conn.WriteJSON(message)
+	}
+}
+
+type MessageToClient struct {
+	Name  string      `json:"name"`
+	Value interface{} `json:"value"`
+}
+
 func CreateServer(directory string) http.Handler {
-	changeServer := sse.Server{}
+	upgrader := websocket.Upgrader{}
+	conns := ClientConnections{}
 
 	suffixer := httpsuffixer.SuffixServer{func(content_type string) []byte {
 		if filter, ok := gFilters[content_type]; ok {
@@ -82,15 +119,20 @@ func CreateServer(directory string) http.Handler {
 	watcher := watcher.NewWatcher(directory)
 	go func() {
 		for change := range watcher.Changes {
-			changeServer.Broadcast(sse.Event{Name: "change", Data: "/" + change})
+			conns.broadcast(MessageToClient{
+				Name:  "change",
+				Value: change,
+			})
 		}
 	}()
 
-	stdinServer := sse.Server{}
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			stdinServer.Broadcast(sse.Event{Name: "line", Data: scanner.Text()})
+			conns.broadcast(MessageToClient{
+				Name:  "stdin",
+				Value: scanner.Text(),
+			})
 		}
 		os.Exit(0)
 	}()
@@ -104,10 +146,23 @@ func CreateServer(directory string) http.Handler {
 	}(fileServer)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.reserve/changes" {
-			changeServer.ServeHTTP(w, r)
-		} else if r.URL.Path == "/.reserve/stdin" {
-			stdinServer.ServeHTTP(w, r)
+		if r.URL.Path == "/.reserve/ws" {
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			conns.add(conn)
+			for {
+				var msg interface{}
+				if err := conn.ReadJSON(&msg); err != nil {
+					break
+				}
+				// TODO: Do something with messages from clients. For now, this loop
+				// serves as a close waiter.
+			}
+			conns.remove(conn)
+			conn.Close()
+			return
 		} else if _, exists := r.URL.Query()["raw"]; !exists && isHotModule(path.Join(".", r.URL.Path)) {
 			w.Header().Set("Content-Type", "application/javascript")
 			w.Write([]byte(jsWrapper(r.URL.Path)))

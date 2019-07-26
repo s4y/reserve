@@ -44,35 +44,45 @@ window.__reserve_hooks_by_extension = {
     return handled;
   };
   const hooks = {};
-
   const cacheBustQuery = () => `?cache_bust=${+new Date}`;
-  const es = new EventSource("/.reserve/changes");
-  es.addEventListener('change', e => {
-    const target = new URL(e.data, location.href).href;
-    const cacheBustedTarget = target + cacheBustQuery();
 
-    if (!(target in hooks)) {
-      const ext = target.split('/').pop().split('.').pop();
-      const genHook = window.__reserve_hooks_by_extension[ext];
-      hooks[target] = genHook ? genHook(target) : () => Promise.resolve();
-    }
-    Promise.resolve()
-      .then(() => hooks[target](cacheBustedTarget))
-      .then(handled => handled || defaultHook(target)(cacheBustedTarget))
-      .then(handled => handled || location.reload(true));
-  });
+  const handleMessage = {
+    change: path => {
+      const target = new URL(path, location.href).href;
+      const cacheBustedTarget = target + cacheBustQuery();
+
+      if (!(target in hooks)) {
+        const ext = target.split('/').pop().split('.').pop();
+        const genHook = window.__reserve_hooks_by_extension[ext];
+        hooks[target] = genHook ? genHook(target) : () => Promise.resolve();
+      }
+      Promise.resolve()
+        .then(() => hooks[target](cacheBustedTarget))
+        .then(handled => handled || defaultHook(target)(cacheBustedTarget))
+        .then(handled => handled || location.reload(true));
+    },
+    stdin: line => {
+      const ev = new CustomEvent('stdin');
+      ev.data = line;
+      window.dispatchEvent(ev);
+    },
+  };
 
   let wasOpen = false;
-  es.addEventListener('open', e => {
-    if (wasOpen)
-      location.reload(true);
-    wasOpen = true;
-  });
-
-  let stdin = new EventSource("/.reserve/stdin");
-  stdin.addEventListener("line", e => {
-    const ev = new CustomEvent('stdin');
-    ev.data = e.data;
-    window.dispatchEvent(ev);
-  });
+  const connect = () => {
+    const ws = new WebSocket(`ws://${location.host}/.reserve/ws`);
+    ws.onopen = e => {
+      if (wasOpen)
+        location.reload(true);
+      wasOpen = true;
+    };
+    ws.onmessage = e => {
+      const { name, value } = JSON.parse(e.data);
+      handleMessage[name](value);
+    };
+    ws.onclose = e => {
+      setTimeout(connect, 1000);
+    };
+  };
+  connect();
 })();
