@@ -71,12 +71,16 @@ export const __reserve_setters = {
 	default: v => _default = v,
 }
 
-if (typeof _default  === "function")
+const href = new URL("` + f + `", location.href).href;
+
+if (typeof _default  === "function") {
 	_default.__on_module_reloaded = [];
+	_default.__file = href;
+}
 
 if (!window.__reserve_hot_modules)
   window.__reserve_hot_modules = {};
-window.__reserve_hot_modules[new URL("` + f + `", location.href).href] = true;
+window.__reserve_hot_modules[href] = true;
 `
 }
 
