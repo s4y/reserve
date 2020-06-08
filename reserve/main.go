@@ -20,7 +20,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 
 	"github.com/s4y/reserve"
 )
@@ -35,11 +34,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	server := reserve.CreateServer(cwd)
+	server := reserve.FileServer(".")
 	log.Fatal(http.Serve(ln, server))
 }

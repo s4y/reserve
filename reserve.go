@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -131,7 +132,7 @@ type MessageToClient struct {
 	Value interface{} `json:"value"`
 }
 
-func CreateServer(directory string) http.Handler {
+func FileServer(directory http.Dir) http.Handler {
 	upgrader := websocket.Upgrader{}
 	conns := ClientConnections{}
 
@@ -145,7 +146,8 @@ func CreateServer(directory string) http.Handler {
 		}
 	}}
 
-	watcher := watcher.NewWatcher(directory)
+	absPath, _ := filepath.Abs(string(directory))
+	watcher := watcher.NewWatcher(absPath)
 	go func() {
 		for change := range watcher.Changes {
 			conns.broadcast(MessageToClient{
@@ -200,7 +202,7 @@ func CreateServer(directory string) http.Handler {
 		} else if staticContent, ok := gStaticFiles[r.URL.Path]; ok {
 			http.ServeContent(w, r, r.URL.Path, static.ModTime, strings.NewReader(string(staticContent)))
 		} else {
-			fileServer.ServeHTTP(w, r)
+			server.ServeHTTP(w, r)
 		}
 	})
 }
