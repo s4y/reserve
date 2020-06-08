@@ -186,8 +186,10 @@ func CreateServer(directory string) http.Handler {
 				if err := conn.ReadJSON(&msg); err != nil {
 					break
 				}
-				// TODO: Do something with messages from clients. For now, this loop
-				// serves as a close waiter.
+				conns.broadcast(MessageToClient{
+					Name:  "broadcast",
+					Value: msg,
+				})
 			}
 			conns.remove(conn)
 			conn.Close()

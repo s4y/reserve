@@ -46,6 +46,11 @@ window.__reserve_hooks_by_extension = {
   const hooks = {};
   const cacheBustQuery = () => `?cache_bust=${+new Date}`;
 
+  let queuedBroadcasts = [];
+  const queueBroadcast = message => queuedBroadcasts.push(message);
+  let broadcast = queueBroadcast;
+  window.addEventListener('sendbroadcast', e => broadcast(e));
+
   const handleMessage = {
     change: path => {
       const target = new URL(path, location.href).href;
@@ -66,6 +71,9 @@ window.__reserve_hooks_by_extension = {
       ev.data = line;
       window.dispatchEvent(ev);
     },
+    broadcast: message => {
+      window.dispatchEvent(new CustomEvent('broadcast', { detail: message }))
+    },
   };
 
   let wasOpen = false;
@@ -75,13 +83,20 @@ window.__reserve_hooks_by_extension = {
       if (wasOpen)
         location.reload(true);
       wasOpen = true;
-    };
+
+      broadcast = e => {
+        ws.send(JSON.stringify(e.detail));
+      };
+      while (queuedBroadcasts.length)
+        broadcast(queuedBroadcasts.shift());
+      };
     ws.onmessage = e => {
       const { name, value } = JSON.parse(e.data);
       handleMessage[name](value);
     };
     ws.onclose = e => {
       setTimeout(connect, 1000);
+      broadcast = queueBroadcast;
     };
   };
   connect();
