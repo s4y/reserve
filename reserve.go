@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -29,8 +30,29 @@ import (
 	"github.com/s4y/reserve/watcher"
 )
 
-var gFilters = map[string][]byte{
-	"text/html": []byte(static.FilterHtml),
+type HTMLSuffixer struct {
+	Suffix         []byte
+	sentScriptTags bool
+	buf            []byte
+}
+
+var doctypeMatcher = regexp.MustCompile(`^\s*<![^>\n]+>`)
+
+func (t *HTMLSuffixer) Tweak(data []byte) []byte {
+	if data != nil && !t.sentScriptTags {
+		t.buf = append(t.buf, data...)
+		if doctype := doctypeMatcher.Find(t.buf); doctype != nil {
+			t.sentScriptTags = true
+			return append(doctype, append(t.Suffix, t.buf[len(doctype):]...)...)
+		}
+		return nil
+	}
+	if !t.sentScriptTags {
+		data = append(t.Suffix, append(t.buf, data...)...)
+		t.sentScriptTags = true
+		t.buf = nil
+	}
+	return data
 }
 
 var gStaticFiles = map[string][]byte{
@@ -109,11 +131,14 @@ func CreateServer(directory string) http.Handler {
 	upgrader := websocket.Upgrader{}
 	conns := ClientConnections{}
 
-	suffixer := httpsuffixer.SuffixServer{func(content_type string) []byte {
-		if filter, ok := gFilters[content_type]; ok {
-			return filter
+	suffixer := httpsuffixer.SuffixServer{func(content_type string) httpsuffixer.Tweaker {
+		switch content_type {
+		case "text/html":
+			// Slice to remove trailing newline
+			return &HTMLSuffixer{Suffix: []byte(static.FilterHtml[:len(static.FilterHtml)-1])}
+		default:
+			return nil
 		}
-		return nil
 	}}
 
 	watcher := watcher.NewWatcher(directory)

@@ -20,14 +20,18 @@ import (
 )
 
 type SuffixServer struct {
-	GetSuffix func(string) []byte
+	NewTweaker func(contentType string) Tweaker
+}
+
+type Tweaker interface {
+	Tweak(data []byte) []byte
 }
 
 type responseWriter struct {
 	Server *SuffixServer
 	Parent http.ResponseWriter
 
-	suffix []byte
+	tweaker Tweaker
 }
 
 func (w *responseWriter) Header() http.Header {
@@ -35,13 +39,21 @@ func (w *responseWriter) Header() http.Header {
 }
 
 func (w *responseWriter) Write(data []byte) (int, error) {
-	return w.Parent.Write(data)
+	oLen := len(data)
+	if w.tweaker != nil {
+		data = w.tweaker.Tweak(data)
+	}
+	bytesWritten, err := w.Parent.Write(data)
+	if err != nil {
+		return bytesWritten, err
+	}
+	return oLen, nil
 }
 
 func (w *responseWriter) WriteHeader(statusCode int) {
 	contentType := strings.SplitN(w.Parent.Header().Get("Content-Type"), ";", 2)[0]
-	if suffix := w.Server.GetSuffix(contentType); suffix != nil {
-		w.suffix = suffix
+	if tweaker := w.Server.NewTweaker(contentType); tweaker != nil {
+		w.tweaker = tweaker
 		w.Header().Del("Content-Length") // TODO
 	}
 	w.Parent.WriteHeader(statusCode)
@@ -52,8 +64,11 @@ func (w *responseWriter) Flush() {
 }
 
 func (w *responseWriter) Finish() {
-	if w.suffix != nil {
-		w.Write(w.suffix)
+	if w.tweaker == nil {
+		return
+	}
+	if trailer := w.tweaker.Tweak(nil); trailer != nil {
+		w.Parent.Write(trailer)
 	}
 }
 
