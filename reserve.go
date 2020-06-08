@@ -168,13 +168,16 @@ func FileServer(directory http.Dir) http.Handler {
 		os.Exit(0)
 	}()
 
-	fileServer := suffixer.WrapServer(http.FileServer(http.Dir(directory)))
-	fileServer = func(handler http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fileServer := http.FileServer(directory)
+	suffixServer := suffixer.WrapServer(fileServer)
+	server := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, exists := r.URL.Query()["raw"]; exists {
+			fileServer.ServeHTTP(w, r)
+		} else {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			handler.ServeHTTP(w, r)
-		})
-	}(fileServer)
+			suffixServer.ServeHTTP(w, r)
+		}
+	})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.reserve/ws" {
