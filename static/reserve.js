@@ -21,6 +21,7 @@ window.__reserve_hooks_by_extension = {
     let target = f.replace(/index\.html$/, '');
     if (curpage == target)
       location.reload(true);
+    return true;
   },
 };
 
@@ -53,8 +54,14 @@ window.__reserve_hooks_by_extension = {
 
   const handleMessage = {
     change: path => {
-      const target = new URL(path, location.href).href;
+      const target = new URL(`/${path}`, location.href).href;
       const cacheBustedTarget = target + cacheBustQuery();
+
+      if (!window.dispatchEvent(new CustomEvent('sourcechange', {
+        detail: target,
+        cancelable: true,
+      })))
+        return;
 
       if (!(target in hooks)) {
         const ext = target.split('/').pop().split('.').pop();
@@ -64,7 +71,11 @@ window.__reserve_hooks_by_extension = {
       Promise.resolve()
         .then(() => hooks[target](cacheBustedTarget))
         .then(handled => handled || defaultHook(target)(cacheBustedTarget))
-        .then(handled => handled || location.reload(true));
+        .then(handled => handled || location.reload(true))
+        .then(() => {
+          for (const element of document.querySelectorAll('[data-reserve-notify-file="'+target+'"]'))
+            element.dispatchEvent(new CustomEvent('sourcechange'));
+        });
     },
     stdin: line => {
       const ev = new CustomEvent('stdin');
@@ -78,10 +89,10 @@ window.__reserve_hooks_by_extension = {
 
   let wasOpen = false;
   const connect = () => {
-    const ws = new WebSocket(`ws://${location.host}/.reserve/ws`);
+    const ws = new WebSocket(`${location.protocol == 'https:' ? 'wss' : 'ws'}://${location.host}/.reserve/ws`);
     ws.onopen = e => {
-      if (wasOpen)
-        location.reload(true);
+      // if (wasOpen)
+      //   location.reload(true);
       wasOpen = true;
 
       broadcast = e => {
