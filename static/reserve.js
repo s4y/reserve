@@ -20,7 +20,7 @@ window.__reserve_hooks_by_extension = {
     let curpage = new URL(location.pathname, location.href).href;
     let target = f.replace(/index\.html$/, '');
     if (curpage == target)
-      location.reload(true);
+      location.reload();
     return true;
   },
 };
