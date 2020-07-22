@@ -35,5 +35,6 @@ func main() {
 	}
 
 	server := reserve.FileServer(".")
+	server.ReadStdin = true
 	log.Fatal(http.Serve(ln, server))
 }

@@ -132,7 +132,14 @@ type MessageToClient struct {
 	Value interface{} `json:"value"`
 }
 
-func FileServer(directory http.Dir) http.Handler {
+type Server struct {
+	Dir       http.Dir
+	ReadStdin bool
+
+	handler http.Handler
+}
+
+func (s *Server) start() {
 	upgrader := websocket.Upgrader{}
 	conns := ClientConnections{}
 
@@ -146,7 +153,7 @@ func FileServer(directory http.Dir) http.Handler {
 		}
 	}}
 
-	absPath, _ := filepath.Abs(string(directory))
+	absPath, _ := filepath.Abs(string(s.Dir))
 	watcher := watcher.NewWatcher(absPath)
 	go func() {
 		for change := range watcher.Changes {
@@ -157,18 +164,20 @@ func FileServer(directory http.Dir) http.Handler {
 		}
 	}()
 
-	go func() {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			conns.broadcast(MessageToClient{
-				Name:  "stdin",
-				Value: scanner.Text(),
-			})
-		}
-		os.Exit(0)
-	}()
+	if s.ReadStdin {
+		go func() {
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				conns.broadcast(MessageToClient{
+					Name:  "stdin",
+					Value: scanner.Text(),
+				})
+			}
+			os.Exit(0)
+		}()
+	}
 
-	fileServer := http.FileServer(directory)
+	fileServer := http.FileServer(s.Dir)
 	suffixServer := suffixer.WrapServer(fileServer)
 	server := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, exists := r.URL.Query()["raw"]; exists {
@@ -179,7 +188,7 @@ func FileServer(directory http.Dir) http.Handler {
 		}
 	})
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.reserve/ws" {
 			conn, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
@@ -208,4 +217,17 @@ func FileServer(directory http.Dir) http.Handler {
 			server.ServeHTTP(w, r)
 		}
 	})
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.handler == nil {
+		s.start()
+	}
+	s.handler.ServeHTTP(w, r)
+}
+
+func FileServer(directory http.Dir) *Server {
+	return &Server{
+		Dir: directory,
+	}
 }
