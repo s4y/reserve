@@ -82,7 +82,8 @@ func NewWatcher(dir string) *Watcher {
 			absDir, _ := filepath.EvalSymlinks(dir)
 
 			for path, _ := range touched {
-				if hasHiddenComponent(path) ||
+				if (!strings.HasSuffix(path, "/.reserveignore") &&
+					hasHiddenComponent(path)) ||
 					// Vim backup files. This check can be tightened up if it's an
 					// issue for anyone.
 					strings.HasSuffix(path, "~") {

@@ -26,6 +26,38 @@ window.__reserve_hooks_by_extension = {
 };
 
 (() => {
+  const ignorePats = [];
+  const shouldIgnore = path => {
+    for (const pat of ignorePats) {
+      if (pat[0] == '/' && path.startsWith(pat))
+        return true;
+    }
+    return false;
+  };
+  const reloadIgnoreFile = () => {
+    fetch('/.reserveignore')
+      .then(r => r.text())
+      .then(text => {
+        ignorePats.length = 0;
+        for (const pat of text.split('\n')) {
+          if (pat)
+            ignorePats.push(pat);
+        }
+      });
+  };
+  reloadIgnoreFile();
+
+  window.addEventListener('sourcechange', e => {
+    const changedPath = new URL(e.detail, location.href).pathname;
+    if (changedPath == '/.reserveignore') {
+      reloadIgnoreFile();
+      e.preventDefault();
+      return;
+    } else if (shouldIgnore(changedPath)) {
+      e.preventDefault();
+    }
+  });
+
   const defaultHook = f => new_f => {
     let handled = false;
     for (let el of document.querySelectorAll('link')) {

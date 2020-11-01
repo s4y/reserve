@@ -97,6 +97,11 @@ func isHotModule(path string) bool {
 	return firstLine == "// reserve:hot_reload\n"
 }
 
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 type ClientConnections struct {
 	connections []*websocket.Conn
 	lock        sync.Mutex
@@ -189,6 +194,7 @@ func (s *Server) start() {
 	})
 
 	s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fsPath := path.Join(".", r.URL.Path)
 		if r.URL.Path == "/.reserve/ws" {
 			conn, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
@@ -208,11 +214,15 @@ func (s *Server) start() {
 			conns.remove(conn)
 			conn.Close()
 			return
-		} else if _, exists := r.URL.Query()["raw"]; !exists && isHotModule(path.Join(".", r.URL.Path)) {
+		} else if _, exists := r.URL.Query()["raw"]; !exists && isHotModule(fsPath) {
 			w.Header().Set("Content-Type", "application/javascript")
 			w.Write([]byte(jsWrapper(r.URL.Path)))
 		} else if staticContent, ok := gStaticFiles[r.URL.Path]; ok {
 			http.ServeContent(w, r, r.URL.Path, static.ModTime, strings.NewReader(string(staticContent)))
+		} else if r.URL.Path == "/.reserveignore" && !fileExists(fsPath) {
+			// Suppress 404s in the browser console
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Write([]byte{})
 		} else {
 			server.ServeHTTP(w, r)
 		}
