@@ -194,7 +194,7 @@ func (s *Server) start() {
 	})
 
 	s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fsPath := path.Join(".", r.URL.Path)
+		fsPath := path.Join(absPath, r.URL.Path)
 		if r.URL.Path == "/.reserve/ws" {
 			conn, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
