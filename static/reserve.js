@@ -143,4 +143,11 @@ window.__reserve_hooks_by_extension = {
     };
   };
   connect();
+
+
+  window.reserve = {
+    broadcast(detail) {
+      broadcast({ detail });
+    }
+  };
 })();
