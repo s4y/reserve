@@ -17,7 +17,6 @@ package watcher
 import (
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -28,10 +27,10 @@ import (
 func hasHiddenComponent(p string) bool {
 	rest := p
 	for {
-		if strings.HasPrefix(path.Base(rest), ".") {
+		if strings.HasPrefix(filepath.Base(rest), ".") {
 			return true
 		}
-		next := path.Dir(rest)
+		next := filepath.Dir(rest)
 		if next == rest {
 			break
 		}
