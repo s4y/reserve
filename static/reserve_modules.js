@@ -32,9 +32,9 @@ window.__reserve_hooks_by_extension.js = f => {
           newm.default.__on_module_reloaded = oldm.default.__on_module_reloaded;
         if (oldm.default.__file)
           newm.default.__file = oldm.default.__file;
-        if (!Object.hasOwnProperty(oldm.default.prototype, 'adopt'))
+        if (!Object.prototype.hasOwnProperty.call(oldm.default.prototype, 'adopt'))
           oldm.default.prototype.adopt = function(){};
-        if (!Object.hasOwnProperty(newm.default.prototype, 'adopt'))
+        if (!Object.prototype.hasOwnProperty.call(newm.default.prototype, 'adopt'))
           newm.default.prototype.adopt = function(){};
         for (const k in newm) {
           const oldproto = oldm[k].prototype;
