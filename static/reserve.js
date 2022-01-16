@@ -82,7 +82,10 @@ window.__reserve_hooks_by_extension = {
   let queuedBroadcasts = [];
   const queueBroadcast = message => queuedBroadcasts.push(message);
   let broadcast = queueBroadcast;
-  window.addEventListener('sendbroadcast', e => broadcast(e));
+  window.addEventListener('sendbroadcast', e => broadcast(e.detail));
+
+  let bestRtt;
+  let clockOffset;
 
   const handleMessage = {
     change: path => {
@@ -117,18 +120,35 @@ window.__reserve_hooks_by_extension = {
     broadcast: message => {
       window.dispatchEvent(new CustomEvent('broadcast', { detail: message }))
     },
+    pong: message => {
+      const { startTime, serverTime } = message;
+      const now = Date.now();
+      const rtt = now - startTime;
+      const proposedOffset = now - serverTime;
+      if (bestRtt == null || (rtt <= bestRtt && proposedOffset >= clockOffset)) {
+        clockOffset = proposedOffset;
+        bestRtt = rtt;
+      }
+    },
   };
 
-  let wasOpen = false;
+  let pingInterval;
+
   const connect = () => {
     const ws = new WebSocket(`${location.protocol == 'https:' ? 'wss' : 'ws'}://${location.host}/.reserve/ws`);
     ws.onopen = e => {
-      // if (wasOpen)
-      //   location.reload(true);
-      wasOpen = true;
+      pingInterval = setInterval(() => {
+        ws.send(JSON.stringify({
+          name: 'ping',
+          value: Date.now(),
+        }));
+      }, 1000 + Math.random() * 500);
 
-      broadcast = e => {
-        ws.send(JSON.stringify(e.detail));
+      broadcast = message => {
+        ws.send(JSON.stringify({
+          name: 'broadcast',
+          value: message,
+        }));
       };
       while (queuedBroadcasts.length)
         broadcast(queuedBroadcasts.shift());
@@ -138,16 +158,22 @@ window.__reserve_hooks_by_extension = {
       handleMessage[name](value);
     };
     ws.onclose = e => {
+      clearInterval(pingInterval);
       setTimeout(connect, 1000);
       broadcast = queueBroadcast;
     };
   };
   connect();
 
-
   window.reserve = {
-    broadcast(detail) {
-      broadcast({ detail });
-    }
+    broadcast(message) {
+      broadcast(message);
+    },
+    now() {
+      let now = Date.now();
+      if (clockOffset)
+        now -= clockOffset - bestRtt / 2;
+      return now;
+    },
   };
 })();

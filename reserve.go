@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/s4y/reserve/httpsuffixer"
@@ -132,7 +133,7 @@ func (s *ClientConnections) broadcast(message interface{}) {
 	}
 }
 
-type MessageToClient struct {
+type Message struct {
 	Name  string      `json:"name"`
 	Value interface{} `json:"value"`
 }
@@ -162,7 +163,7 @@ func (s *Server) start() {
 	watcher := watcher.NewWatcher(absPath)
 	go func() {
 		for change := range watcher.Changes {
-			conns.broadcast(MessageToClient{
+			conns.broadcast(Message{
 				Name:  "change",
 				Value: change,
 			})
@@ -173,7 +174,7 @@ func (s *Server) start() {
 		go func() {
 			scanner := bufio.NewScanner(os.Stdin)
 			for scanner.Scan() {
-				conns.broadcast(MessageToClient{
+				conns.broadcast(Message{
 					Name:  "stdin",
 					Value: scanner.Text(),
 				})
@@ -202,14 +203,22 @@ func (s *Server) start() {
 			}
 			conns.add(conn)
 			for {
-				var msg interface{}
+				var msg Message
 				if err := conn.ReadJSON(&msg); err != nil {
 					break
 				}
-				conns.broadcast(MessageToClient{
-					Name:  "broadcast",
-					Value: msg,
-				})
+				switch msg.Name {
+				case "broadcast":
+					conns.broadcast(msg)
+				case "ping":
+					startTime, _ := msg.Value.(float64)
+					conn.WriteJSON(Message{"pong", struct {
+						StartTime  float64 `json:"startTime"`
+						ServerTime int64   `json:"serverTime"`
+					}{startTime, time.Now().UnixNano() / int64(time.Millisecond)}})
+				default:
+					continue
+				}
 			}
 			conns.remove(conn)
 			conn.Close()
