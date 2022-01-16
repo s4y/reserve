@@ -149,15 +149,16 @@ func (s *Server) start() {
 	upgrader := websocket.Upgrader{}
 	conns := ClientConnections{}
 
-	suffixer := httpsuffixer.SuffixServer{func(content_type string) httpsuffixer.Tweaker {
-		switch content_type {
-		case "text/html":
-			// Slice to remove trailing newline
-			return &HTMLSuffixer{Suffix: []byte(static.FilterHtml[:len(static.FilterHtml)-1])}
-		default:
-			return nil
-		}
-	}}
+	suffixer := httpsuffixer.SuffixServer{
+		NewTweaker: func(content_type string) httpsuffixer.Tweaker {
+			switch content_type {
+			case "text/html":
+				// Slice to remove trailing newline
+				return &HTMLSuffixer{Suffix: []byte(static.FilterHtml[:len(static.FilterHtml)-1])}
+			default:
+				return nil
+			}
+		}}
 
 	absPath, _ := filepath.Abs(string(s.Dir))
 	watcher := watcher.NewWatcher(absPath)
