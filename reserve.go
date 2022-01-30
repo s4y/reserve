@@ -104,17 +104,17 @@ func fileExists(path string) bool {
 }
 
 type ClientConnections struct {
-	connections []*websocket.Conn
+	connections []chan func(*websocket.Conn)
 	lock        sync.Mutex
 }
 
-func (s *ClientConnections) add(c *websocket.Conn) {
+func (s *ClientConnections) add(c chan func(*websocket.Conn)) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.connections = append(s.connections, c)
 }
 
-func (s *ClientConnections) remove(c *websocket.Conn) {
+func (s *ClientConnections) remove(c chan func(*websocket.Conn)) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for i, cur_conn := range s.connections {
@@ -129,7 +129,9 @@ func (s *ClientConnections) broadcast(message interface{}) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for _, conn := range s.connections {
-		conn.WriteJSON(message)
+		conn <- func(c *websocket.Conn) {
+			c.WriteJSON(message)
+		}
 	}
 }
 
@@ -143,6 +145,16 @@ type Server struct {
 	ReadStdin bool
 
 	handler http.Handler
+}
+
+func wrapConnection(c *websocket.Conn) chan func(*websocket.Conn) {
+	ch := make(chan func(*websocket.Conn), 16)
+	go func() {
+		for f := range ch {
+			f(c)
+		}
+	}()
+	return ch
 }
 
 func (s *Server) start() {
@@ -202,7 +214,11 @@ func (s *Server) start() {
 			if err != nil {
 				return
 			}
-			conns.add(conn)
+			defer conn.Close()
+			ch := wrapConnection(conn)
+			defer close(ch)
+			conns.add(ch)
+			defer conns.remove(ch)
 			for {
 				var msg Message
 				if err := conn.ReadJSON(&msg); err != nil {
@@ -213,16 +229,16 @@ func (s *Server) start() {
 					conns.broadcast(msg)
 				case "ping":
 					startTime, _ := msg.Value.(float64)
-					conn.WriteJSON(Message{"pong", struct {
-						StartTime  float64 `json:"startTime"`
-						ServerTime int64   `json:"serverTime"`
-					}{startTime, time.Now().UnixNano() / int64(time.Millisecond)}})
+					ch <- func(conn *websocket.Conn) {
+						conn.WriteJSON(Message{"pong", struct {
+							StartTime  float64 `json:"startTime"`
+							ServerTime int64   `json:"serverTime"`
+						}{startTime, time.Now().UnixNano() / int64(time.Millisecond)}})
+					}
 				default:
 					continue
 				}
 			}
-			conns.remove(conn)
-			conn.Close()
 			return
 		} else if _, exists := r.URL.Query()["raw"]; !exists && isHotModule(fsPath) {
 			w.Header().Set("Content-Type", "application/javascript")
