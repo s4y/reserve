@@ -172,7 +172,7 @@ window.__reserve_hooks_by_extension = {
     now() {
       let now = Date.now();
       if (clockOffset != null)
-        now -= -clockOffset - bestRtt / 2;
+        now -= clockOffset - bestRtt / 2;
       return now;
     },
   };
