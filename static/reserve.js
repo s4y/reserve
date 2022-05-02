@@ -125,7 +125,7 @@ window.__reserve_hooks_by_extension = {
       const now = Date.now();
       const rtt = now - startTime;
       const proposedOffset = now - serverTime;
-      if (bestRtt == null || (rtt <= bestRtt && proposedOffset >= clockOffset)) {
+      if (bestRtt == null || rtt <= bestRtt) {
         clockOffset = proposedOffset;
         bestRtt = rtt;
       }
