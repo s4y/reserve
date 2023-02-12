@@ -84,8 +84,8 @@ window.__reserve_hooks_by_extension = {
   let broadcast = queueBroadcast;
   window.addEventListener('sendbroadcast', e => broadcast(e.detail));
 
-  let bestRtt;
-  let clockOffset;
+  let clockSamples = [];
+  let bestClockOffset = 0;
 
   const handleMessage = {
     change: path => {
@@ -125,14 +125,15 @@ window.__reserve_hooks_by_extension = {
       const now = Date.now();
       const rtt = now - startTime;
       const proposedOffset = now - serverTime;
-      if (bestRtt == null || rtt <= bestRtt) {
-        clockOffset = proposedOffset;
-        bestRtt = rtt;
-      }
+      clockSamples.push(proposedOffset - rtt / 2);
+      while (clockSamples.length > 30)
+        clockSamples.shift();
+      bestClockOffset = clockSamples.reduce((best, x) => (Math.abs(best) < Math.abs(x)) ? best : x);
     },
   };
 
   let pingInterval;
+  let deadTimeout;
 
   const connect = () => {
     const ws = new WebSocket(`${location.protocol == 'https:' ? 'wss' : 'ws'}://${location.host}/.reserve/ws`);
@@ -153,7 +154,19 @@ window.__reserve_hooks_by_extension = {
       while (queuedBroadcasts.length)
         broadcast(queuedBroadcasts.shift());
       };
+
+    const resetDead = () => {
+      if (deadTimeout)
+        clearTimeout(deadTimeout);
+      deadTimeout = setTimeout(() => {
+        ws.close();
+        ws.onclose();
+      }, 5000);
+    };
+    resetDead();
+
     ws.onmessage = e => {
+      resetDead();
       const { name, value } = JSON.parse(e.data);
       handleMessage[name](value);
     };
@@ -170,10 +183,7 @@ window.__reserve_hooks_by_extension = {
       broadcast(message);
     },
     now() {
-      let now = Date.now();
-      if (clockOffset != null)
-        now -= clockOffset - bestRtt / 2;
-      return now;
+      return Date.now() - bestClockOffset;
     },
   };
 })();
