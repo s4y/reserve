@@ -103,18 +103,24 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+type ClientConnection struct {
+	conn *websocket.Conn
+
+	subscriptions map[string]bool
+}
+
 type ClientConnections struct {
-	connections []chan func(*websocket.Conn)
+	connections []chan func(*ClientConnection)
 	lock        sync.Mutex
 }
 
-func (s *ClientConnections) add(c chan func(*websocket.Conn)) {
+func (s *ClientConnections) add(c chan func(*ClientConnection)) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.connections = append(s.connections, c)
 }
 
-func (s *ClientConnections) remove(c chan func(*websocket.Conn)) {
+func (s *ClientConnections) remove(c chan func(*ClientConnection)) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for i, cur_conn := range s.connections {
@@ -125,18 +131,24 @@ func (s *ClientConnections) remove(c chan func(*websocket.Conn)) {
 	}
 }
 
-func (s *ClientConnections) broadcast(message interface{}) {
+func (s *ClientConnections) broadcast(message interface{}, topic string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for _, conn := range s.connections {
-		conn <- func(c *websocket.Conn) {
-			c.WriteJSON(message)
+		conn <- func(c *ClientConnection) {
+			if topic != "" {
+				if ok, _ := c.subscriptions[topic]; !ok {
+					return
+				}
+			}
+			c.conn.WriteJSON(message)
 		}
 	}
 }
 
 type Message struct {
 	Name  string      `json:"name"`
+	Topic string      `json:"topic,omitempty"`
 	Value interface{} `json:"value"`
 }
 
@@ -147,11 +159,12 @@ type Server struct {
 	handler http.Handler
 }
 
-func wrapConnection(c *websocket.Conn) chan func(*websocket.Conn) {
-	ch := make(chan func(*websocket.Conn), 16)
+func wrapConnection(c *websocket.Conn) chan func(*ClientConnection) {
+	cc := ClientConnection{c, make(map[string]bool)}
+	ch := make(chan func(*ClientConnection), 16)
 	go func() {
 		for f := range ch {
-			f(c)
+			f(&cc)
 		}
 	}()
 	return ch
@@ -179,7 +192,7 @@ func (s *Server) start() {
 			conns.broadcast(Message{
 				Name:  "change",
 				Value: change,
-			})
+			}, "")
 		}
 	}()
 
@@ -190,7 +203,7 @@ func (s *Server) start() {
 				conns.broadcast(Message{
 					Name:  "stdin",
 					Value: scanner.Text(),
-				})
+				}, "")
 			}
 			os.Exit(0)
 		}()
@@ -226,11 +239,15 @@ func (s *Server) start() {
 				}
 				switch msg.Name {
 				case "broadcast":
-					conns.broadcast(msg)
+					conns.broadcast(msg, msg.Topic)
+				case "subscribe":
+					ch <- func(c *ClientConnection) {
+						c.subscriptions[msg.Topic] = true
+					}
 				case "ping":
 					startTime, _ := msg.Value.(float64)
-					ch <- func(conn *websocket.Conn) {
-						conn.WriteJSON(Message{"pong", struct {
+					ch <- func(c *ClientConnection) {
+						c.conn.WriteJSON(Message{"pong", "", struct {
 							StartTime  float64 `json:"startTime"`
 							ServerTime int64   `json:"serverTime"`
 						}{startTime, time.Now().UnixNano() / int64(time.Millisecond)}})

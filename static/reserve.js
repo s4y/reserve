@@ -80,7 +80,7 @@ window.__reserve_hooks_by_extension = {
   const cacheBustQuery = () => `?cache_bust=${+new Date}`;
 
   let queuedBroadcasts = [];
-  const queueBroadcast = message => queuedBroadcasts.push(message);
+  const queueBroadcast = (...args) => queuedBroadcasts.push(args);
   let broadcast = queueBroadcast;
   window.addEventListener('sendbroadcast', e => broadcast(e.detail));
 
@@ -145,14 +145,15 @@ window.__reserve_hooks_by_extension = {
         }));
       }, 1000 + Math.random() * 500);
 
-      broadcast = message => {
+      broadcast = (message, topic) => {
         ws.send(JSON.stringify({
           name: 'broadcast',
+          topic: topic,
           value: message,
         }));
       };
       while (queuedBroadcasts.length)
-        broadcast(queuedBroadcasts.shift());
+        broadcast(...queuedBroadcasts.shift());
       };
 
     const resetDead = () => {
@@ -179,8 +180,8 @@ window.__reserve_hooks_by_extension = {
   connect();
 
   window.reserve = {
-    broadcast(message) {
-      broadcast(message);
+    broadcast(...args) {
+      broadcast(...args);
     },
     now() {
       return Date.now() - bestClockOffset;
