@@ -199,10 +199,10 @@ func (s *Server) start() {
 	fileServer := http.FileServer(s.Dir)
 	suffixServer := suffixer.WrapServer(fileServer)
 	server := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "must-revalidate")
 		if _, exists := r.URL.Query()["raw"]; exists {
 			fileServer.ServeHTTP(w, r)
 		} else {
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			suffixServer.ServeHTTP(w, r)
 		}
 	})
