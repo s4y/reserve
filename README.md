@@ -49,7 +49,7 @@ reserve.broadcast({ foo: "bar" });
 
 ```javascript
 window.addEventListener("broadcast", e => {
-  console.log(e.data);
+  console.log(e.detail);
 });
 ```
 
