@@ -157,6 +157,30 @@ func wrapConnection(c *websocket.Conn) chan func(*websocket.Conn) {
 	return ch
 }
 
+type minLastModifiedResponseWriter struct {
+	http.ResponseWriter
+}
+
+var startupTime = time.Time.Round(time.Now().UTC(), time.Second)
+
+func (w *minLastModifiedResponseWriter) WriteHeader(statusCode int) {
+	if lm, err := time.Parse(http.TimeFormat, w.Header().Get("Last-Modified")); err != nil || lm.Before(startupTime) {
+		w.Header().Set("Last-Modified", startupTime.Format(http.TimeFormat))
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func ensureMinLastModifiedTime(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if clientTime, err := time.Parse(http.TimeFormat, r.Header.Get("If-Modified-Since")); err == nil {
+			if clientTime.Before(startupTime) {
+				r.Header.Del("If-Modified-Since")
+			}
+		}
+		next.ServeHTTP(&minLastModifiedResponseWriter{w}, r)
+	})
+}
+
 func (s *Server) start() {
 	upgrader := websocket.Upgrader{}
 	conns := ClientConnections{}
@@ -196,10 +220,10 @@ func (s *Server) start() {
 		}()
 	}
 
-	fileServer := http.FileServer(s.Dir)
+	fileServer := ensureMinLastModifiedTime(http.FileServer(s.Dir))
 	suffixServer := suffixer.WrapServer(fileServer)
 	server := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "must-revalidate")
+		w.Header().Set("Cache-Control", "no-cache")
 		if _, exists := r.URL.Query()["raw"]; exists {
 			fileServer.ServeHTTP(w, r)
 		} else {
