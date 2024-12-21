@@ -16,6 +16,9 @@ package reserve
 
 import (
 	"bufio"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -181,6 +184,26 @@ func ensureMinLastModifiedTime(next http.Handler) http.Handler {
 	})
 }
 
+func serveJSONDirectoryListing(path string, w http.ResponseWriter, r *http.Request) error {
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	type fileInfo struct {
+		Name string `json:"name"`
+	}
+	fileInfos := []fileInfo{}
+	for _, f := range files {
+		name := f.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		fileInfos = append(fileInfos, fileInfo{Name: name})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(fileInfos)
+}
+
 func (s *Server) start() {
 	upgrader := websocket.Upgrader{}
 	conns := ClientConnections{}
@@ -274,6 +297,19 @@ func (s *Server) start() {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			w.Write([]byte{})
 		} else {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			if _, wantJSON := r.URL.Query()["json"]; wantJSON {
+				stat, err := os.Stat(fsPath)
+				if err != nil {
+					fmt.Println(err)
+				}
+				if stat != nil && stat.IsDir() {
+					err := serveJSONDirectoryListing(fsPath, w, r)
+					if err == nil {
+						return
+					}
+				}
+			}
 			server.ServeHTTP(w, r)
 		}
 	})
