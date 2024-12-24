@@ -26,6 +26,7 @@ import (
 
 func main() {
 	httpAddr := flag.String("http", "127.0.0.1:8080", "Listening address")
+	readStdin := flag.Bool("stdin", false, "Read standard input and fire \"stdin\" JavaScript events for each line")
 	flag.Parse()
 	fmt.Printf("http://%s/\n", *httpAddr)
 
@@ -35,6 +36,6 @@ func main() {
 	}
 
 	server := reserve.FileServer(".")
-	server.ReadStdin = true
+	server.ReadStdin = *readStdin
 	log.Fatal(http.Serve(ln, server))
 }
