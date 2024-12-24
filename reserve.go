@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -185,7 +184,7 @@ func ensureMinLastModifiedTime(next http.Handler) http.Handler {
 }
 
 func serveJSONDirectoryListing(path string, w http.ResponseWriter, r *http.Request) error {
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return err
 	}
