@@ -254,6 +254,10 @@ func (s *Server) start() {
 	})
 
 	s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		// Will be overridden (above) for regular files
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+
 		fsPath := path.Join(absPath, r.URL.Path)
 		if r.URL.Path == "/.reserve/ws" {
 			conn, err := upgrader.Upgrade(w, r, nil)
@@ -293,10 +297,8 @@ func (s *Server) start() {
 			http.ServeContent(w, r, r.URL.Path, static.ModTime, strings.NewReader(string(staticContent)))
 		} else if r.URL.Path == "/.reserveignore" && !fileExists(fsPath) {
 			// Suppress 404s in the browser console
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			w.Write([]byte{})
 		} else {
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			wantHTML := false
 			if acceptHeader := r.Header.Get("Accept"); acceptHeader != "" {
 				for _, contentType := range strings.Split(acceptHeader, ",") {
