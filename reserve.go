@@ -298,7 +298,18 @@ func (s *Server) start() {
 			w.Write([]byte{})
 		} else {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			if _, wantJSON := r.URL.Query()["json"]; wantJSON {
+			wantHTML := false
+			if acceptHeader := r.Header.Get("Accept"); acceptHeader != "" {
+				for _, contentType := range strings.Split(acceptHeader, ",") {
+					if strings.Split(contentType, ";")[0] == "text/html" {
+						wantHTML = true
+						break
+					}
+				}
+			}
+			_, wantJSON := r.URL.Query()["json"]
+
+			if wantJSON || !wantHTML {
 				stat, err := os.Stat(fsPath)
 				if err != nil {
 					fmt.Println(err)
