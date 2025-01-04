@@ -17,7 +17,6 @@ package reserve
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path"
@@ -311,10 +310,7 @@ func (s *Server) start() {
 			_, wantJSON := r.URL.Query()["json"]
 
 			if wantJSON || !wantHTML {
-				stat, err := os.Stat(fsPath)
-				if err != nil {
-					fmt.Println(err)
-				}
+				stat, _ := os.Stat(fsPath)
 				if stat != nil && stat.IsDir() {
 					err := serveJSONDirectoryListing(fsPath, w, r)
 					if err == nil {
