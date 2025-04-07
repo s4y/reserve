@@ -132,10 +132,10 @@ window.__reserve_hooks_by_extension = {
     },
   };
 
-  let pingInterval;
-  let deadTimeout;
-
   const connect = () => {
+    let pingInterval;
+    let deadTimeout;
+
     const ws = new WebSocket(`${location.protocol == 'https:' ? 'wss' : 'ws'}://${location.host}/.reserve/ws`);
     ws.onopen = e => {
       pingInterval = setInterval(() => {
@@ -172,6 +172,7 @@ window.__reserve_hooks_by_extension = {
     };
     ws.onclose = e => {
       clearInterval(pingInterval);
+      clearTimeout(deadTimeout);
       setTimeout(connect, 1000);
       broadcast = queueBroadcast;
     };
