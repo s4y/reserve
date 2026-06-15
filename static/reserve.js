@@ -160,7 +160,6 @@ window.__reserve_hooks_by_extension = {
         clearTimeout(deadTimeout);
       deadTimeout = setTimeout(() => {
         ws.close();
-        ws.onclose();
       }, 5000);
     };
     resetDead();
