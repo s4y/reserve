@@ -57,11 +57,11 @@ window.__reserve_hooks_by_extension.js = f => {
           if (!setter)
             location.reload(true);
           setter(newm[k]);
+        }
 
-          if (newm.default.__on_module_reloaded) {
-            for (const f of newm.default.__on_module_reloaded)
-              f();
-          }
+        if (newm.default.__on_module_reloaded) {
+          for (const f of newm.default.__on_module_reloaded)
+            f();
         }
         return true;
       });
